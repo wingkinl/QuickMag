@@ -20,7 +20,7 @@ protected:
 
 	void Init();
 
-	void DrawInfoPanel(CDC* pDCDraw, CRect rcDraw, COLORREF crfCursor, CPoint ptCursor);
+	CSize DrawInfoPanel(CDC* pDCDraw, CRect rcDraw, COLORREF crfCursor, CPoint ptCursor, BOOL bCalcOnly = FALSE);
 
 	void DoPaint(CDC& dc);
 private:

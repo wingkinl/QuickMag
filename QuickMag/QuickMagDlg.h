@@ -39,7 +39,7 @@ public:
 	CMagnifierWnd	m_wndMagnifier;
 	CSliderCtrl		m_sliderRatio;
 	CButton			m_chkAlwaysOnTop;
-	CSize			m_szDlg;
+	//CSize			m_szDlg;
 	afx_msg void OnSize(UINT nType, int cx, int cy);
 	afx_msg LRESULT OnNcHitTest(CPoint point);
 	afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);	

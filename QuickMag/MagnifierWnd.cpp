@@ -298,7 +298,13 @@ void CMagnifierWnd::DoPaint(CDC& dc)
 	CPoint ptCursor = CPoint(0, 0);
 	GetCursorPos(&ptCursor);
 
-	const int nInfoPanelWidth = 80;
+	int nInfoPanelWidth = 80;
+
+	{
+		CRect rcInfoPane = rcDraw;
+		CSize szPane = DrawInfoPanel(pDCDraw, rcInfoPane, 0, ptCursor, TRUE);
+		nInfoPanelWidth = szPane.cx;
+	}
 
 	CRect rcMagnify = rcDraw;
 	rcMagnify.right -= nInfoPanelWidth;
@@ -318,15 +324,20 @@ void CMagnifierWnd::OnPaint()
 	DoPaint(dc);
 }
 
-void CMagnifierWnd::DrawInfoPanel(CDC* pDCDraw, CRect rcInfoPane, COLORREF crfCursor, CPoint ptCursor)
+CSize CMagnifierWnd::DrawInfoPanel(CDC* pDCDraw, CRect rcInfoPane, COLORREF crfCursor, CPoint ptCursor, BOOL bCalcOnly)
 {
+	CSize szPane(0, 0);
+
+	const int nEdgeGap = 3 * 4;
+
 	rcInfoPane.DeflateRect(3, 3);
 
 	CPen pen(PS_SOLID, 1, GetSysColor(COLOR_ACTIVEBORDER));
 	auto pOldPen = pDCDraw->SelectObject(&pen);
 	auto pOldBrush = pDCDraw->SelectObject(GetStockObject(NULL_BRUSH));
 
-	pDCDraw->Rectangle(rcInfoPane);
+	if (!bCalcOnly)
+		pDCDraw->Rectangle(rcInfoPane);
 
 	pDCDraw->SelectObject(pOldBrush);
 	pDCDraw->SelectObject(pOldPen);
@@ -335,24 +346,34 @@ void CMagnifierWnd::DrawInfoPanel(CDC* pDCDraw, CRect rcInfoPane, COLORREF crfCu
 
 	auto pOldFont = pDCDraw->SelectObject(&GetGlobalData()->fontRegular);
 
-	CRect rcColorElem = rcInfoPane;
-	const int nColorElemHeight = 20;
-	rcColorElem.bottom = rcColorElem.top + nColorElemHeight;
+	const int nGap = 4;
 
-	int nGap = 5;
+	CRect rcColorElem = rcInfoPane;
+	CRect rc = rcInfoPane;
+	auto sz = pDCDraw->GetTextExtent(_T("0123456789"));
+	auto cy = sz.cy;
+	const int nDefColorElemHeight = cy + nGap;
+	rcColorElem.bottom = rcColorElem.top + nDefColorElemHeight;
+
+	DWORD nDTFlags = bCalcOnly ? DT_CALCRECT : 0;
+
 	CString str;
 	// RGB component rectangles
 	for (int elem = 0; elem < 3; ++elem)
 	{
 		COLORREF crfFill = 0xff << (elem * 8);
-		pDCDraw->FillSolidRect(rcColorElem, crfFill);
+		if (!bCalcOnly)
+			pDCDraw->FillSolidRect(rcColorElem, crfFill);
 
 		int nElemVal = ((crfCursor & 0xffffff) & crfFill) >> (elem * 8);
 		str.Format(_T("%d"), nElemVal);
 
 		COLORREF crfText = (~crfFill) & 0xffffff;
 		pDCDraw->SetTextColor(crfText);
-		pDCDraw->DrawText(str, rcColorElem, DT_CENTER | DT_VCENTER | DT_NOPREFIX | DT_SINGLELINE);
+		pDCDraw->DrawText(str, rcColorElem, DT_CENTER | DT_VCENTER | DT_NOPREFIX | DT_SINGLELINE | nDTFlags);
+		rcColorElem.bottom = rcColorElem.top + nDefColorElemHeight;
+		szPane.cx = max(szPane.cx, rcColorElem.Width() + nGap * 2);
+		szPane.cy += nDefColorElemHeight + nGap;
 
 		rcColorElem.OffsetRect(0, rcColorElem.Height() + nGap);
 	}
@@ -360,21 +381,33 @@ void CMagnifierWnd::DrawInfoPanel(CDC* pDCDraw, CRect rcInfoPane, COLORREF crfCu
 	CRect rcInfo = rcColorElem;
 	pDCDraw->SetBkMode(TRANSPARENT);
 	pDCDraw->SetTextColor(RGB(0, 0, 0));
-	pDCDraw->DrawText(_T("Hex"), rcInfo, DT_VCENTER | DT_NOPREFIX | DT_SINGLELINE);
+	cy = pDCDraw->DrawText(_T("Web"), rcInfo, DT_VCENTER | DT_NOPREFIX | DT_SINGLELINE | nDTFlags);
+	szPane.cx = max(szPane.cx, rcInfo.Width());
+	szPane.cy += cy + nGap;
+	rcInfo.bottom = rcInfo.top + cy;
 
 	rcInfo.OffsetRect(0, rcInfo.Height() + nGap);
 
-	str.Format(_T("%06X"), crfCursor);
+	str.Format(_T("#%02X%02X%02X"), GetRValue(crfCursor), GetGValue(crfCursor), GetBValue(crfCursor));
 	pDCDraw->SetTextColor(RGB(0, 0, 255));
-	pDCDraw->DrawText(str, rcInfo, DT_CENTER | DT_VCENTER | DT_NOPREFIX | DT_SINGLELINE);
+	sz = pDCDraw->GetTextExtent(str);
+	pDCDraw->DrawText(str, rcInfo, DT_CENTER | DT_VCENTER | DT_NOPREFIX | DT_SINGLELINE | nDTFlags);
+	szPane.cx = max(szPane.cx, sz.cx + nGap * 2);
+	szPane.cy += sz.cy + nGap;
+	rcInfo.bottom = rcInfo.top + cy;
 
 	rcInfo.OffsetRect(0, rcInfo.Height() + nGap);
 	rcInfo.bottom = rcInfo.top + rcInfo.Width();
-	// The actual color box
-	CBrush br(crfCursor);
-	pOldBrush = pDCDraw->SelectObject(&br);
-	pDCDraw->Rectangle(rcInfo);
-	pDCDraw->SelectObject(pOldBrush);
+	if (!bCalcOnly)
+	{
+		// The actual color box
+		CBrush br(crfCursor);
+		pOldBrush = pDCDraw->SelectObject(&br);
+		pDCDraw->Rectangle(rcInfo);
+		pDCDraw->SelectObject(pOldBrush);
+	}
+
+	szPane.cy += rcInfo.Width() + nGap;
 
 	// additional info
 	rcInfo.OffsetRect(0, rcInfo.Height() + nGap);
@@ -398,9 +431,15 @@ void CMagnifierWnd::DrawInfoPanel(CDC* pDCDraw, CRect rcInfoPane, COLORREF crfCu
 	strInfo += _T("\r\n\r\n");
 	strInfo += str;
 
-	pDCDraw->DrawText(strInfo, rcInfo, DT_LEFT | DT_NOPREFIX);
+	cy = pDCDraw->DrawText(strInfo, rcInfo, DT_LEFT | DT_NOPREFIX | nDTFlags);
+	szPane.cy += cy;
 
 	pDCDraw->SelectObject(pOldFont);
+
+	szPane.cx += nEdgeGap;
+	szPane.cy += nEdgeGap;
+
+	return szPane;
 }
 
 int CMagnifierWnd::OnCreate(LPCREATESTRUCT lpCreateStruct)

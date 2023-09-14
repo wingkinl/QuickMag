@@ -64,7 +64,7 @@ CQuickMagDlg::CQuickMagDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_QUICKMAG_DIALOG, pParent)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
-	m_szDlg = CSize(0, 0);
+	//m_szDlg = CSize(0, 0);
 }
 
 void CQuickMagDlg::DoDataExchange(CDataExchange* pDX)
@@ -121,9 +121,9 @@ BOOL CQuickMagDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
-	CRect rect;
-	GetClientRect(rect);
-	m_szDlg = rect.Size();
+	//CRect rect;
+	//GetClientRect(rect);
+	//m_szDlg = rect.Size();
 	
 	m_sliderRatio.SetRange(1, 16);
 	m_sliderRatio.SetTicFreq(2);
@@ -188,18 +188,18 @@ void CQuickMagDlg::OnSize(UINT nType, int cx, int cy)
 {
 	CDialogEx::OnSize(nType, cx, cy);
 
-	CSize szDlg = CSize(cx, cy);
-	if ( m_wndMagnifier.GetSafeHwnd() )
-	{
-		CSize szDiff = szDlg - m_szDlg;
-
-		CRect rect;
-		m_wndMagnifier.GetWindowRect(rect); ScreenToClient(rect);
-		rect.right += szDiff.cx;
-		rect.bottom += szDiff.cy;
-		m_wndMagnifier.MoveWindow(rect);
-	}
-	m_szDlg = szDlg;
+// 	CSize szDlg = CSize(cx, cy);
+// 	if ( m_wndMagnifier.GetSafeHwnd() )
+// 	{
+// 		CSize szDiff = szDlg - m_szDlg;
+// 
+// 		CRect rect;
+// 		m_wndMagnifier.GetWindowRect(rect); ScreenToClient(rect);
+// 		rect.right += szDiff.cx;
+// 		rect.bottom += szDiff.cy;
+// 		m_wndMagnifier.MoveWindow(rect);
+// 	}
+// 	m_szDlg = szDlg;
 }
 
 
