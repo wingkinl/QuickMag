@@ -78,186 +78,182 @@ BOOL DrawMagnifiedDesktopArea(CDC& dc, CRect rcDraw, CPoint ptCursor, int nRatio
 	if (nRatio <= 0 || nRatio > 16)
 		return FALSE;
 	CWnd* pWndDesktop = CWnd::GetDesktopWindow();
-	if (pWndDesktop->GetSafeHwnd())
+	if (!pWndDesktop->GetSafeHwnd())
+		return FALSE;
+	CSize szDraw = rcDraw.Size();
+	CClientDC dcDesktop(pWndDesktop);
+
+	if (1 == nRatio)
 	{
-		CSize szDraw = rcDraw.Size();
-		CDC* pDCDesktop = pWndDesktop->GetDC();
+		crfCursor = dcDesktop.GetPixel(ptCursor);
 
-		if (1 == nRatio)
-		{
-			crfCursor = pDCDesktop->GetPixel(ptCursor);
-
-			CPoint ptCaptureTopLeft = ptCursor;
-			ptCaptureTopLeft.x -= szDraw.cx / 2;
-			ptCaptureTopLeft.y -= szDraw.cy / 2;
-			dc.BitBlt(rcDraw.left, rcDraw.top, szDraw.cx, szDraw.cy, pDCDesktop, ptCaptureTopLeft.x, ptCaptureTopLeft.y, SRCCOPY | CAPTUREBLT);
-		}
-		else
-		{
-			BOOL bDrawGridlines = nRatio >= 8;
-
-			CSize szCaptureBmp;
-			szCaptureBmp.cx = (szDraw.cx + nRatio - 1) / nRatio;
-			szCaptureBmp.cy = (szDraw.cy + nRatio - 1) / nRatio;
-			// make odd number such that the cursor point can be centered
-			if ( !(szCaptureBmp.cx & 1) )
-				++szCaptureBmp.cx;
-			if ( !(szCaptureBmp.cy & 1) )
-				++szCaptureBmp.cy;
-
-			CPoint ptBmpCenter;
-			ptBmpCenter.x = szCaptureBmp.cx / 2;
-			ptBmpCenter.y = szCaptureBmp.cy / 2;
-
-			CPoint ptCaptureTopLeft = ptCursor - CSize(szCaptureBmp.cx / 2, szCaptureBmp.cy / 2);
-			CRect rcCapture = CRect(ptCaptureTopLeft, szCaptureBmp);
-
-			LONG ulBitmapWidth = szCaptureBmp.cx;
-			LONG ulBitmapHeight = szCaptureBmp.cy;
-			LPVOID pvBits = nullptr;
-			BITMAPINFO bmi;
-			// zero the memory for the bitmap info
-			ZeroMemory(&bmi, sizeof(BITMAPINFO));
-
-			// setup bitmap info
-			bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-			bmi.bmiHeader.biWidth = ulBitmapWidth;
-			bmi.bmiHeader.biHeight = ulBitmapHeight;
-			bmi.bmiHeader.biPlanes = 1;
-			bmi.bmiHeader.biBitCount = 32;         // four 8-bit components
-			bmi.bmiHeader.biCompression = BI_RGB;
-			bmi.bmiHeader.biSizeImage = ulBitmapWidth * ulBitmapHeight * 4;
-
-			// create our DIB section and select the bitmap into the dc
-			CDC dcMem;
-			dcMem.CreateCompatibleDC(&dc);
-			HBITMAP hBitmap = CreateDIBSection(dcMem, &bmi, DIB_RGB_COLORS, &pvBits, NULL, 0);			
-			if ( !hBitmap || !pvBits )
-			{
-				ASSERT(FALSE);
-				return FALSE;
-			}
-			CBitmap bmp;
-			bmp.Attach(hBitmap);
-			auto oldBmp = dcMem.SelectObject(&bmp);
-
-			dcMem.BitBlt(0, 0, szCaptureBmp.cx, szCaptureBmp.cy, pDCDesktop, ptCaptureTopLeft.x, ptCaptureTopLeft.y, SRCCOPY | CAPTUREBLT);
-
-			CSize szCanvas = szDraw;
-			CRect rcCanvas = rcDraw;
-
-			if ( bDrawGridlines && bReserve1PixelForGrid)
-			{
-				// fill + grid lines (1 pixel)
-				szCanvas.cx = szCaptureBmp.cx * nRatio + szCaptureBmp.cx - 1;
-				szCanvas.cy = szCaptureBmp.cy * nRatio + szCaptureBmp.cy - 1;
-
-				CPoint ptDrawCenter = rcDraw.CenterPoint();
-				CPoint ptCanvasTopLeft = ptDrawCenter - CSize(szCanvas.cx / 2, szCanvas.cy / 2);
-				rcCanvas = CRect(ptCanvasTopLeft, szCanvas);
-			}
-
-			LPDWORD pBmpBits = (LPDWORD)pvBits;
-			
-			DWORD* pColors = (DWORD*)pvBits;
-
-			CPen* oldPen = nullptr;
-			COLORREF crfGrid = RGB(128,128,128);
-			CPen penGrid;
-			if ( bDrawGridlines )
-			{
-				LOGBRUSH brGrid = {0};
-				brGrid.lbStyle = BS_SOLID;
-				brGrid.lbColor = crfGrid;
-				penGrid.CreatePen(PS_COSMETIC|PS_ALTERNATE, 1, &brGrid);
-				oldPen = dc.SelectObject(&penGrid);
-			}
-			dc.IntersectClipRect(rcDraw);
-
-			dc.FillSolidRect(rcDraw, RGB(192,192,192));
-			
-			// NOTE: BMP is upside down
-			DWORD* pClrCur = pColors;
-			
-			int nY = rcCanvas.top + (szCaptureBmp.cy - 1) * nRatio;
-			if ( bDrawGridlines && bReserve1PixelForGrid )
-				nY += szCaptureBmp.cy - 1;
-
-			for (int nBmpY = 0; nBmpY < szCaptureBmp.cy; ++nBmpY)
-			{
-				for (int nBmpX = 0; nBmpX < szCaptureBmp.cx; ++nBmpX)
-				{
-					int nX = rcCanvas.left + nBmpX * nRatio;
-					if ( bDrawGridlines && bReserve1PixelForGrid )
-						nX += nBmpX;
-					CRect rcPoint(nX, nY, nX + nRatio, nY + nRatio);
-
-					COLORREF crf = *pClrCur & 0x00ffffff;
-					crf = ((crf & 0xff) << 16) | (crf & 0xff00) | ((crf & 0xff0000) >> 16);
-
-					dc.FillSolidRect(rcPoint, crf);
-
-					//*pClrCur &= 0x00ffffff;
-					++pClrCur;
-
-					if ( bDrawGridlines && nBmpX == ptBmpCenter.x && nBmpY == ptBmpCenter.y )
-					{
-						CPen penCenter(PS_SOLID, 3, RGB(160,160,160));
-						auto pOldPen = dc.SelectObject(&penCenter);
-						auto pOldBrush = dc.SelectObject(GetStockObject(NULL_BRUSH));
-						dc.Rectangle(rcPoint);
-						dc.SelectObject(pOldBrush);
-						dc.SelectObject(pOldPen);
-					}
-				}
-				// horizontal grid lines
-				if (bDrawGridlines && nBmpY < szCaptureBmp.cy - 1)
-				{
-					int nYGrid = bReserve1PixelForGrid ? nY - 1 : nY;
-					dc.MoveTo(rcCanvas.left, nYGrid);
-					dc.LineTo(rcCanvas.right, nYGrid);
-				}
-				
-				nY -= nRatio;
-
-				if ( bDrawGridlines && bReserve1PixelForGrid )
-					--nY;
-			}
-
-			// vertical grid lines
-			if (bDrawGridlines)
-			{
-				int nX = rcCanvas.left + nRatio;
-				for (int nBmpX = 1; nBmpX < szCaptureBmp.cx; ++nBmpX)
-				{
-					dc.MoveTo(nX, rcCanvas.top);
-					dc.LineTo(nX, rcCanvas.bottom);
-					nX += nRatio;
-					if (bReserve1PixelForGrid)
-						++nX;
-				}
-			}
-
-			dc.SelectClipRgn(nullptr);
-			if (bDrawGridlines)
-			{
-				dc.SelectObject(oldPen);
-			}
-
-			int nBmpPos = ptBmpCenter.x + (szCaptureBmp.cy - ptBmpCenter.y - 1) * szCaptureBmp.cx;
-			COLORREF crf = pColors[nBmpPos];
-			crf &= 0x00ffffff;
-			crf = ((crf & 0xff) << 16) | (crf & 0xff00) | ((crf & 0xff0000) >> 16);
-			
-			crfCursor = crf;
-
-			dcMem.SelectObject(oldBmp);
-		}
-
-		pDCDesktop->DeleteDC();
-		return TRUE;
+		CPoint ptCaptureTopLeft = ptCursor;
+		ptCaptureTopLeft.x -= szDraw.cx / 2;
+		ptCaptureTopLeft.y -= szDraw.cy / 2;
+		dc.BitBlt(rcDraw.left, rcDraw.top, szDraw.cx, szDraw.cy, &dcDesktop, ptCaptureTopLeft.x, ptCaptureTopLeft.y, SRCCOPY | CAPTUREBLT);
 	}
-	return FALSE;
+	else
+	{
+		BOOL bDrawGridlines = nRatio >= 8;
+
+		CSize szCaptureBmp;
+		szCaptureBmp.cx = (szDraw.cx + nRatio - 1) / nRatio;
+		szCaptureBmp.cy = (szDraw.cy + nRatio - 1) / nRatio;
+		// make odd number such that the cursor point can be centered
+		if ( !(szCaptureBmp.cx & 1) )
+			++szCaptureBmp.cx;
+		if ( !(szCaptureBmp.cy & 1) )
+			++szCaptureBmp.cy;
+
+		CPoint ptBmpCenter;
+		ptBmpCenter.x = szCaptureBmp.cx / 2;
+		ptBmpCenter.y = szCaptureBmp.cy / 2;
+
+		CPoint ptCaptureTopLeft = ptCursor - CSize(szCaptureBmp.cx / 2, szCaptureBmp.cy / 2);
+		CRect rcCapture = CRect(ptCaptureTopLeft, szCaptureBmp);
+
+		LONG ulBitmapWidth = szCaptureBmp.cx;
+		LONG ulBitmapHeight = szCaptureBmp.cy;
+		LPVOID pvBits = nullptr;
+		BITMAPINFO bmi;
+		// zero the memory for the bitmap info
+		ZeroMemory(&bmi, sizeof(BITMAPINFO));
+
+		// setup bitmap info
+		bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+		bmi.bmiHeader.biWidth = ulBitmapWidth;
+		bmi.bmiHeader.biHeight = ulBitmapHeight;
+		bmi.bmiHeader.biPlanes = 1;
+		bmi.bmiHeader.biBitCount = 32;         // four 8-bit components
+		bmi.bmiHeader.biCompression = BI_RGB;
+		bmi.bmiHeader.biSizeImage = ulBitmapWidth * ulBitmapHeight * 4;
+
+		// create our DIB section and select the bitmap into the dc
+		CDC dcMem;
+		dcMem.CreateCompatibleDC(&dc);
+		HBITMAP hBitmap = CreateDIBSection(dcMem, &bmi, DIB_RGB_COLORS, &pvBits, NULL, 0);			
+		if ( !hBitmap || !pvBits )
+		{
+			ASSERT(FALSE);
+			return FALSE;
+		}
+		CBitmap bmp;
+		bmp.Attach(hBitmap);
+		auto oldBmp = dcMem.SelectObject(&bmp);
+
+		dcMem.BitBlt(0, 0, szCaptureBmp.cx, szCaptureBmp.cy, &dcDesktop, ptCaptureTopLeft.x, ptCaptureTopLeft.y, SRCCOPY | CAPTUREBLT);
+
+		CSize szCanvas = szDraw;
+		CRect rcCanvas = rcDraw;
+
+		if ( bDrawGridlines && bReserve1PixelForGrid)
+		{
+			// fill + grid lines (1 pixel)
+			szCanvas.cx = szCaptureBmp.cx * nRatio + szCaptureBmp.cx - 1;
+			szCanvas.cy = szCaptureBmp.cy * nRatio + szCaptureBmp.cy - 1;
+
+			CPoint ptDrawCenter = rcDraw.CenterPoint();
+			CPoint ptCanvasTopLeft = ptDrawCenter - CSize(szCanvas.cx / 2, szCanvas.cy / 2);
+			rcCanvas = CRect(ptCanvasTopLeft, szCanvas);
+		}
+
+		LPDWORD pBmpBits = (LPDWORD)pvBits;
+			
+		DWORD* pColors = (DWORD*)pvBits;
+
+		CPen* oldPen = nullptr;
+		COLORREF crfGrid = RGB(128,128,128);
+		CPen penGrid;
+		if ( bDrawGridlines )
+		{
+			LOGBRUSH brGrid = {0};
+			brGrid.lbStyle = BS_SOLID;
+			brGrid.lbColor = crfGrid;
+			penGrid.CreatePen(PS_COSMETIC|PS_ALTERNATE, 1, &brGrid);
+			oldPen = dc.SelectObject(&penGrid);
+		}
+		dc.IntersectClipRect(rcDraw);
+
+		dc.FillSolidRect(rcDraw, RGB(192,192,192));
+			
+		// NOTE: BMP is upside down
+		DWORD* pClrCur = pColors;
+			
+		int nY = rcCanvas.top + (szCaptureBmp.cy - 1) * nRatio;
+		if ( bDrawGridlines && bReserve1PixelForGrid )
+			nY += szCaptureBmp.cy - 1;
+
+		for (int nBmpY = 0; nBmpY < szCaptureBmp.cy; ++nBmpY)
+		{
+			for (int nBmpX = 0; nBmpX < szCaptureBmp.cx; ++nBmpX)
+			{
+				int nX = rcCanvas.left + nBmpX * nRatio;
+				if ( bDrawGridlines && bReserve1PixelForGrid )
+					nX += nBmpX;
+				CRect rcPoint(nX, nY, nX + nRatio, nY + nRatio);
+
+				COLORREF crf = *pClrCur & 0x00ffffff;
+				crf = ((crf & 0xff) << 16) | (crf & 0xff00) | ((crf & 0xff0000) >> 16);
+
+				dc.FillSolidRect(rcPoint, crf);
+
+				//*pClrCur &= 0x00ffffff;
+				++pClrCur;
+
+				if ( bDrawGridlines && nBmpX == ptBmpCenter.x && nBmpY == ptBmpCenter.y )
+				{
+					CPen penCenter(PS_SOLID, 3, RGB(160,160,160));
+					auto pOldPen = dc.SelectObject(&penCenter);
+					auto pOldBrush = dc.SelectObject(GetStockObject(NULL_BRUSH));
+					dc.Rectangle(rcPoint);
+					dc.SelectObject(pOldBrush);
+					dc.SelectObject(pOldPen);
+				}
+			}
+			// horizontal grid lines
+			if (bDrawGridlines && nBmpY < szCaptureBmp.cy - 1)
+			{
+				int nYGrid = bReserve1PixelForGrid ? nY - 1 : nY;
+				dc.MoveTo(rcCanvas.left, nYGrid);
+				dc.LineTo(rcCanvas.right, nYGrid);
+			}
+				
+			nY -= nRatio;
+
+			if ( bDrawGridlines && bReserve1PixelForGrid )
+				--nY;
+		}
+
+		// vertical grid lines
+		if (bDrawGridlines)
+		{
+			int nX = rcCanvas.left + nRatio;
+			for (int nBmpX = 1; nBmpX < szCaptureBmp.cx; ++nBmpX)
+			{
+				dc.MoveTo(nX, rcCanvas.top);
+				dc.LineTo(nX, rcCanvas.bottom);
+				nX += nRatio;
+				if (bReserve1PixelForGrid)
+					++nX;
+			}
+		}
+
+		dc.SelectClipRgn(nullptr);
+		if (bDrawGridlines)
+		{
+			dc.SelectObject(oldPen);
+		}
+
+		int nBmpPos = ptBmpCenter.x + (szCaptureBmp.cy - ptBmpCenter.y - 1) * szCaptureBmp.cx;
+		COLORREF crf = pColors[nBmpPos];
+		crf &= 0x00ffffff;
+		crf = ((crf & 0xff) << 16) | (crf & 0xff00) | ((crf & 0xff0000) >> 16);
+			
+		crfCursor = crf;
+
+		dcMem.SelectObject(oldBmp);
+	}
+	return TRUE;
 }
 
 class CMyMemDC : public CMemDC
